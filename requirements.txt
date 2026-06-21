@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-multipart
+sse-starlette
+PyMuPDF
+opencv-python-headless
+openpyxl
+fonttools
+numpy
