@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import logging
+import random
 import fitz  # PyMuPDF
 from openpyxl import Workbook
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
@@ -358,6 +359,8 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
     detector = TableDetector()
     scale_factor = 72.0 / 300
     all_rows = []
+    verification_samples = []
+    row_counter = 0
     
     if progress_callback:
         progress_callback(15, "Extracting Cover Page Metadata...")
@@ -440,7 +443,28 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
             if len(row_text) >= 2:
                 while len(row_text) < 8:
                     row_text.append("")
-                page_rows.append(row_text[:8])
+                final_row = row_text[:8]
+                page_rows.append(final_row)
+                
+                # Reservoir sampling for 5 verification samples
+                row_min_y = max(0, min(c[1] for c in row))
+                row_max_y = min(img.shape[0], max(c[1]+c[3] for c in row))
+                row_min_x = max(0, min(c[0] for c in row))
+                row_max_x = min(img.shape[1], max(c[0]+c[2] for c in row))
+                
+                row_counter += 1
+                sample_data = {
+                    "page": page_num,
+                    "text": final_row,
+                    "img": img[row_min_y:row_max_y, row_min_x:row_max_x].copy()
+                }
+                
+                if len(verification_samples) < 5:
+                    verification_samples.append(sample_data)
+                else:
+                    j = random.randint(0, row_counter - 1)
+                    if j < 5:
+                        verification_samples[j] = sample_data
                 
         all_rows.extend(page_rows)
         logger.info(f"Page {page_num}: Extracted {len(page_rows)} rows. Running total: {len(all_rows)}")
@@ -537,6 +561,14 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
     elapsed = time.time() - start_time
     file_size = os.path.getsize(output_path)
     
+    # Write verification images
+    import cv2
+    saved_samples = []
+    for i, sample in enumerate(verification_samples):
+        img_path = f"/tmp/verify_{i}.png"
+        cv2.imwrite(img_path, sample["img"])
+        saved_samples.append({"image": img_path, "text": sample["text"], "page": sample["page"]})
+
     logger.info("=" * 60)
     logger.info("CONVERSION COMPLETE")
     logger.info(f"  Input:  {pdf_path}")
@@ -547,7 +579,7 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
     logger.info(f"  Time:   {elapsed:.1f}s")
     logger.info("=" * 60)
     
-    return output_path, len(all_rows)
+    return output_path, len(all_rows), saved_samples
 
 if __name__ == "__main__":
     pdf_file = sys.argv[1] if len(sys.argv) > 1 else "DOC-20260613-WA0000..pdf"

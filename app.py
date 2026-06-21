@@ -13,9 +13,10 @@ import platform
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QProgressBar, QFileDialog, QFrame, QSpacerItem, QSizePolicy,
+    QDialog, QScrollArea
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QObject
-from PyQt6.QtGui import QFont, QColor, QPalette, QIcon
+from PyQt6.QtGui import QFont, QColor, QPalette, QIcon, QPixmap
 
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -27,7 +28,7 @@ from convert_full import convert_pdf_to_excel
 # ============================================================
 class ProgressSignals(QObject):
     progress = pyqtSignal(int, str)
-    finished = pyqtSignal(str, int)
+    finished = pyqtSignal(str, int, list)
     error = pyqtSignal(str)
 
 
@@ -155,6 +156,19 @@ QPushButton#openBtn:hover {
     background-color: #16a34a;
 }
 
+QPushButton#verifyBtn {
+    background-color: #3b82f6;
+    color: white;
+    font-size: 15px;
+    font-weight: bold;
+    padding: 12px 24px;
+    border-radius: 12px;
+    border: none;
+}
+QPushButton#verifyBtn:hover {
+    background-color: #2563eb;
+}
+
 QPushButton#resetBtn {
     background: none;
     border: none;
@@ -172,6 +186,59 @@ QLabel#footerLabel {
 }
 """
 
+
+class VerifyDialog(QDialog):
+    def __init__(self, samples, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Verify Extracted Data")
+        self.setMinimumSize(800, 600)
+        self.setStyleSheet(STYLESHEET)
+        
+        layout = QVBoxLayout(self)
+        
+        title = QLabel("Random Verification Samples")
+        title.setObjectName("title")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; background-color: #0f0d1a; }")
+        
+        content = QWidget()
+        content.setStyleSheet("background-color: #0f0d1a;")
+        content_layout = QVBoxLayout(content)
+        
+        for sample in samples:
+            card = QFrame()
+            card.setObjectName("card")
+            card_layout = QVBoxLayout(card)
+            
+            header = QLabel(f"Page {sample['page']}")
+            header.setStyleSheet("color: #7c3aed; font-weight: bold;")
+            card_layout.addWidget(header)
+            
+            img_label = QLabel()
+            pixmap = QPixmap(sample['image'])
+            if not pixmap.isNull():
+                img_label.setPixmap(pixmap.scaledToWidth(700, Qt.TransformationMode.SmoothTransformation))
+            card_layout.addWidget(img_label)
+            
+            text_str = "  |  ".join(filter(None, sample['text']))
+            text_label = QLabel(text_str)
+            text_label.setStyleSheet("color: #f1f0f5; font-size: 15px; margin-top: 10px;")
+            text_label.setWordWrap(True)
+            card_layout.addWidget(text_label)
+            
+            content_layout.addWidget(card)
+            
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+        
+        close_btn = QPushButton("Close")
+        close_btn.setObjectName("convertBtn")
+        close_btn.clicked.connect(self.accept)
+        layout.addWidget(close_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
 class VoterListApp(QMainWindow):
     def __init__(self):
@@ -296,12 +363,18 @@ class VoterListApp(QMainWindow):
         self.open_btn.setObjectName("openBtn")
         self.open_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.open_btn.clicked.connect(self._open_output)
-        self.open_btn.setVisible(False)
+        
+        self.verify_btn = QPushButton("👁️   Verify Data")
+        self.verify_btn.setObjectName("verifyBtn")
+        self.verify_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.verify_btn.clicked.connect(self._verify_data)
 
         open_layout = QHBoxLayout()
-        open_layout.addSpacing(60)
+        open_layout.addSpacing(30)
         open_layout.addWidget(self.open_btn)
-        open_layout.addSpacing(60)
+        open_layout.addWidget(self.verify_btn)
+        open_layout.addSpacing(30)
+        
         self.open_layout_widget = QWidget()
         self.open_layout_widget.setLayout(open_layout)
         self.open_layout_widget.setVisible(False)
@@ -389,12 +462,12 @@ class VoterListApp(QMainWindow):
             def progress_callback(percent, message):
                 self.signals.progress.emit(percent, message)
 
-            out_path, num_rows = convert_pdf_to_excel(
+            out_path, num_rows, samples = convert_pdf_to_excel(
                 self.selected_pdf,
                 self.output_path,
                 progress_callback=progress_callback,
             )
-            self.signals.finished.emit(out_path, num_rows)
+            self.signals.finished.emit(out_path, num_rows, samples)
 
         except Exception as e:
             self.signals.error.emit(str(e))
@@ -403,8 +476,9 @@ class VoterListApp(QMainWindow):
         self.progress_bar.setValue(percent)
         self.progress_label.setText(f"{percent}%  •  {message}")
 
-    def _on_success(self, path, num_rows):
+    def _on_success(self, path, num_rows, samples):
         self.is_processing = False
+        self.current_samples = samples
         self.progress_bar.setValue(100)
         self.progress_label.setText("100%  •  Done!")
 
@@ -434,6 +508,12 @@ class VoterListApp(QMainWindow):
         self.convert_btn.setEnabled(True)
         self.convert_btn.setText("⚡   Convert to Excel")
         self.browse_btn.setEnabled(True)
+
+    def _verify_data(self):
+        if not hasattr(self, "current_samples") or not self.current_samples:
+            return
+        dlg = VerifyDialog(self.current_samples, self)
+        dlg.exec()
 
     def _open_output(self):
         if self.output_path and os.path.exists(self.output_path):
