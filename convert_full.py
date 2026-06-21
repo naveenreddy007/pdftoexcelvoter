@@ -313,7 +313,7 @@ def extract_metadata_from_page_0(page, decoder):
 # ============================================================
 # Main Converter Execution
 # ============================================================
-def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
+def convert_pdf_to_excel(pdf_path, output_path, font_path="ABCDEE+Gautami.ttf", progress_callback=None, image_prefix="/tmp/verify_"):
     start_time = time.time()
     
     if progress_callback:
@@ -565,7 +565,7 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
     import cv2
     saved_samples = []
     for i, sample in enumerate(verification_samples):
-        img_path = f"/tmp/verify_{i}.png"
+        img_path = f"{image_prefix}{i}.png"
         cv2.imwrite(img_path, sample["img"])
         saved_samples.append({"image": img_path, "text": sample["text"], "page": sample["page"]})
 

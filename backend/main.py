@@ -67,6 +67,19 @@ async def download_file(job_id: str):
         return FileResponse(path=excel_path, filename="Voter_List.xlsx", media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     return {"error": "File not ready or not found."}
 
+@app.get("/api/verify/{job_id}")
+async def get_verification(job_id: str):
+    if job_id in extraction_progress and "samples" in extraction_progress[job_id]:
+        return {"samples": extraction_progress[job_id]["samples"]}
+    return {"error": "No verification data found"}
+
+@app.get("/api/verify_image/{job_id}/{index}")
+async def get_verify_image(job_id: str, index: int):
+    path = f"/tmp/{job_id}_verify_{index}.png"
+    if os.path.exists(path):
+        return FileResponse(path)
+    return {"error": "Image not found"}
+
 def run_extraction(pdf_path: str, job_id: str):
     try:
         extraction_progress[job_id]["status"] = "processing"
@@ -79,12 +92,18 @@ def run_extraction(pdf_path: str, job_id: str):
             extraction_progress[job_id]["message"] = message
             
         # This function directly extracts perfect text from the embedded Gautami font (no OCR required)
-        convert_pdf_to_excel(pdf_path, output_excel, progress_callback=progress_updater)
+        out_path, num_rows, samples = convert_pdf_to_excel(
+            pdf_path, 
+            output_excel, 
+            progress_callback=progress_updater,
+            image_prefix=f"/tmp/{job_id}_verify_"
+        )
             
         extraction_progress[job_id]["status"] = "completed"
         extraction_progress[job_id]["progress"] = 100
         extraction_progress[job_id]["message"] = "Extraction complete!"
         extraction_progress[job_id]["download_url"] = output_excel
+        extraction_progress[job_id]["samples"] = samples
         
     except Exception as e:
         import traceback
