@@ -27,7 +27,7 @@ from convert_full import convert_pdf_to_excel
 # ============================================================
 class ProgressSignals(QObject):
     progress = pyqtSignal(int, str)
-    finished = pyqtSignal(str)
+    finished = pyqtSignal(str, int)
     error = pyqtSignal(str)
 
 
@@ -364,10 +364,22 @@ class VoterListApp(QMainWindow):
         self.reset_btn.setVisible(False)
         self.progress_bar.setValue(0)
 
-        # Output path
-        pdf_dir = os.path.dirname(self.selected_pdf)
-        pdf_name = os.path.splitext(os.path.basename(self.selected_pdf))[0]
-        self.output_path = os.path.join(pdf_dir, f"{pdf_name}_VoterList.xlsx")
+        # Prompt for save location
+        default_name = f"{os.path.splitext(os.path.basename(self.selected_pdf))[0]}_VoterList.xlsx"
+        save_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Excel File As",
+            os.path.join(os.path.dirname(self.selected_pdf), default_name),
+            "Excel Files (*.xlsx)"
+        )
+        if not save_path:
+            self.convert_btn.setEnabled(True)
+            self.convert_btn.setText("⚡   Convert to Excel")
+            self.browse_btn.setEnabled(True)
+            self.is_processing = False
+            return
+            
+        self.output_path = save_path
 
         thread = threading.Thread(target=self._run_conversion, daemon=True)
         thread.start()
@@ -377,12 +389,12 @@ class VoterListApp(QMainWindow):
             def progress_callback(percent, message):
                 self.signals.progress.emit(percent, message)
 
-            convert_pdf_to_excel(
+            out_path, num_rows = convert_pdf_to_excel(
                 self.selected_pdf,
                 self.output_path,
                 progress_callback=progress_callback,
             )
-            self.signals.finished.emit(self.output_path)
+            self.signals.finished.emit(out_path, num_rows)
 
         except Exception as e:
             self.signals.error.emit(str(e))
@@ -391,7 +403,7 @@ class VoterListApp(QMainWindow):
         self.progress_bar.setValue(percent)
         self.progress_label.setText(f"{percent}%  •  {message}")
 
-    def _on_success(self, path):
+    def _on_success(self, path, num_rows):
         self.is_processing = False
         self.progress_bar.setValue(100)
         self.progress_label.setText("100%  •  Done!")
@@ -399,7 +411,7 @@ class VoterListApp(QMainWindow):
         self.status_label.setObjectName("statusSuccess")
         self.status_label.style().unpolish(self.status_label)
         self.status_label.style().polish(self.status_label)
-        self.status_label.setText(f"✅  Saved: {os.path.basename(path)}")
+        self.status_label.setText(f"✅  Success! Extracted {num_rows} voters.\nSaved to: {os.path.basename(path)}")
 
         self.convert_btn.setEnabled(True)
         self.convert_btn.setText("⚡   Convert to Excel")

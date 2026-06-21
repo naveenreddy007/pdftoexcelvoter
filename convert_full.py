@@ -368,8 +368,8 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
     if pages_to_process < 1:
         pages_to_process = 1
     
-    # Process only table pages (from page 2 to page 55)
-    for page_idx in range(1, total_pages - 1):
+    # Process all pages after cover page (summary pages are skipped automatically if no grid)
+    for page_idx in range(1, total_pages):
         page_num = page_idx + 1
         page = doc[page_idx]
         
@@ -506,7 +506,8 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
     # 2. Write Metadata Sheet (second tab)
     ws_meta = wb.create_sheet(title="Metadata")
     
-    metadata_headers = ["State", "Assembly_Constituency_Name", "Assembly_Constituency_Number", "Part_Number", "Revision_Year", "Polling_Station"]
+    metadata_headers = ["State", "Assembly_Constituency_Name", "Assembly_Constituency_Number", "Part_Number", "Revision_Year", "Polling_Station", "Total_Voters_Extracted"]
+    metadata["Total_Voters_Extracted"] = str(len(all_rows))
     for col_idx, header in enumerate(metadata_headers, start=1):
         cell = ws_meta.cell(row=1, column=col_idx, value=header)
         cell.font = header_font
@@ -546,7 +547,7 @@ def convert_pdf_to_excel(pdf_path, output_path, progress_callback=None):
     logger.info(f"  Time:   {elapsed:.1f}s")
     logger.info("=" * 60)
     
-    return output_path
+    return output_path, len(all_rows)
 
 if __name__ == "__main__":
     pdf_file = sys.argv[1] if len(sys.argv) > 1 else "DOC-20260613-WA0000..pdf"
